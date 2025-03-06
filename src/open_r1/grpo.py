@@ -16,7 +16,8 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-
+import json
+import random
 import datasets
 import torch
 import transformers
@@ -33,6 +34,7 @@ from open_r1.rewards import (
     get_repetition_penalty_reward,
     len_reward,
     reasoning_steps_reward,
+    tag_count_reward,
 )
 from open_r1.utils import get_tokenizer
 from open_r1.utils.callbacks import get_callbacks
@@ -65,6 +67,7 @@ class GRPOScriptArguments(ScriptArguments):
 
     reward_funcs: list[str] = field(
         default_factory=lambda: ["accuracy", "format"],
+
         metadata={
             "help": "List of reward functions. Possible values: 'accuracy', 'format', 'format_deepseek', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length'"
         },
@@ -138,7 +141,8 @@ def main(script_args, training_args, model_args):
         init_wandb_training(training_args)
 
     # Load the dataset
-    dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
+    # dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
+    
 
     ################
     # Load tokenizer
@@ -163,24 +167,71 @@ def main(script_args, training_args, model_args):
         ),
         "length": len_reward,
         "code": code_reward,
+        "tag_count": tag_count_reward,
     }
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 
     # Format into conversation
-    def make_conversation(example):
+    def make_conversation(dataset):
         prompt = []
+        new = []
+        for example in dataset:
+            if training_args.system_prompt is not None:
+                prompt.append({"role": "system", "content": training_args.system_prompt})
 
-        if training_args.system_prompt is not None:
-            prompt.append({"role": "system", "content": training_args.system_prompt})
+            prompt.append({"role": "user", "content": example["problem"]})
+            example["prompt"] = prompt
+            new.append(example)
+        return new
+    
+    with open(script_args.dataset_name, "r") as f:
+        dataset = []
+        for line in f:
+            dataset.append(json.loads(line))
 
-        prompt.append({"role": "user", "content": example["problem"]})
-        return {"prompt": prompt}
 
-    dataset = dataset.map(make_conversation)
+    random.shuffle(dataset)
+    
+    eval_dataset = [{"problem": "dummy", "solution": "dummy", "messages": [{"role": "user", "content": "dummy"}, {"role": "assistant", "content": "dummy"}]}]
+    
+    new_dataset = []
+    for d in dataset:
+        if 'source' in d and d['source'] == 'code':
+            new_dataset.append({
+                "prompt": [
+                    {"role": "system", "content": training_args.system_prompt},
+                    {"role": "user", "content": d["problem"]},
+                ],
+                "solution": d["solution"],
+                "verification_info": d["verification_info"]
+            })
+        else:
+            new_dataset.append({
+                "prompt": [
+                    {"role": "system", "content": training_args.system_prompt},
+                    {"role": "user", "content": d["problem"]},
+                ],
+                "solution": d["solution"]
+            })
+    
+    dataset = new_dataset
+    
+    new_dataset = []
+    for d in eval_dataset:
+        new_dataset.append({
+            "prompt": [
+                {"role": "system", "content": training_args.system_prompt},
+                {"role": "user", "content": d["problem"]},
+            ],
+            "solution": d["solution"]
+        })
+    
+    eval_dataset = new_dataset
 
-    for split in dataset:
-        if "messages" in dataset[split].column_names:
-            dataset[split] = dataset[split].remove_columns("messages")
+    # if you use the huggingface datasets, you can use the following code
+    # for split in dataset:
+    #     if "messages" in dataset[split].column_names:
+    #         dataset[split] = dataset[split].remove_columns("messages")
 
     logger.info("*** Initializing model kwargs ***")
     torch_dtype = (
@@ -202,8 +253,8 @@ def main(script_args, training_args, model_args):
         model=model_args.model_name_or_path,
         reward_funcs=reward_funcs,
         args=training_args,
-        train_dataset=dataset[script_args.dataset_train_split],
-        eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+        train_dataset=dataset,
+        eval_dataset=eval_dataset if training_args.eval_strategy != "no" else None,
         peft_config=get_peft_config(model_args),
         callbacks=get_callbacks(training_args, model_args),
         processing_class=tokenizer,
@@ -220,7 +271,8 @@ def main(script_args, training_args, model_args):
         checkpoint = last_checkpoint
     train_result = trainer.train(resume_from_checkpoint=checkpoint)
     metrics = train_result.metrics
-    metrics["train_samples"] = len(dataset[script_args.dataset_train_split])
+    # metrics["train_samples"] = len(dataset[script_args.dataset_train_split])
+    metrics["train_samples"] = len(dataset) # minju
     trainer.log_metrics("train", metrics)
     trainer.save_metrics("train", metrics)
     trainer.save_state()
@@ -256,12 +308,17 @@ def main(script_args, training_args, model_args):
     #############
     # push to hub
     #############
-    if training_args.push_to_hub:
-        logger.info("Pushing to hub...")
-        trainer.push_to_hub(**kwargs)
+    # if training_args.push_to_hub: # minju
+    #     logger.info("Pushing to hub...")
+    #     trainer.push_to_hub(**kwargs)
 
 
 if __name__ == "__main__":
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
     main(script_args, training_args, model_args)
+
+
+# ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/zero2.yaml \
+    # --num_processes=7 src/open_r1/grpo.py \
+    # --config recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/config.yaml

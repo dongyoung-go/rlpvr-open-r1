@@ -4,9 +4,10 @@ import json
 import math
 import re
 from typing import Dict
+import subprocess
 
 from latex2sympy2_extended import NormalizationConfig
-from math_verify import LatexExtractionConfig, parse, verify
+from math_verify import LatexExtractionConfig, parse, verify, StringExtractionConfig
 
 from .utils import is_e2b_available
 
@@ -22,40 +23,57 @@ def accuracy_reward(completions, solution, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
-    for content, sol in zip(contents, solution):
-        gold_parsed = parse(
-            sol,
-            extraction_mode="first_match",
-            extraction_config=[LatexExtractionConfig()],
-        )
-        if len(gold_parsed) != 0:
-            # We require the answer to be provided in correct latex (no malformed operators)
-            answer_parsed = parse(
-                content,
-                extraction_config=[
-                    LatexExtractionConfig(
-                        normalization_config=NormalizationConfig(
-                            nits=False,
-                            malformed_operators=False,
-                            basic_latex=True,
-                            equations=True,
-                            boxed="all",
-                            units=True,
-                        ),
-                        # Ensures that boxed is tried first
-                        boxed_match_priority=0,
-                        try_extract_without_anchor=False,
+
+    if '```python' in solution[0]:
+        reward = code_reward(completions, **kwargs)
+        rewards += reward
+    else:
+        for content, sol in zip(contents, solution):
+            if 'A' == sol or 'B' == sol or 'C' == sol or 'D' == sol or 'E' == sol or 'F' == sol or 'G' == sol or 'H' == sol:
+                gold_parsed = sol
+                if len(gold_parsed) != 0:
+                    answer_parsed = parse(content, extraction_config=[StringExtractionConfig(strings=("A", "B", "C", "D", "E", "F", "G", "H"))])
+                    reward = float(verify(gold_parsed, answer_parsed))
+                else:
+                    # If the gold solution is not parseable, we reward 1 to skip this example
+                    print("Failed to parse gold solution: ", sol)
+                    reward = 1.0
+
+                rewards.append(reward)
+            else:
+                gold_parsed = parse(
+                    sol,
+                    extraction_mode="first_match",
+                    extraction_config=[LatexExtractionConfig()],
+                )
+                if len(gold_parsed) != 0:
+                    # We require the answer to be provided in correct latex (no malformed operators)
+                    answer_parsed = parse(
+                        content,
+                        extraction_config=[
+                            LatexExtractionConfig(
+                                normalization_config=NormalizationConfig(
+                                    nits=False,
+                                    malformed_operators=False,
+                                    basic_latex=True,
+                                    equations=True,
+                                    boxed="all",
+                                    units=True,
+                                ),
+                                # Ensures that boxed is tried first
+                                boxed_match_priority=0,
+                                try_extract_without_anchor=False,
+                            )
+                        ],
+                        extraction_mode="first_match",
                     )
-                ],
-                extraction_mode="first_match",
-            )
-            # Reward 1 if the content is the same as the ground truth, 0 otherwise
-            reward = float(verify(answer_parsed, gold_parsed))
-        else:
-            # If the gold solution is not parseable, we reward 1 to skip this example
-            reward = 1.0
-            print("Failed to parse gold solution: ", sol)
-        rewards.append(reward)
+                    # Reward 1 if the content is the same as the ground truth, 0 otherwise
+                    reward = float(verify(answer_parsed, gold_parsed))
+                else:
+                    # If the gold solution is not parseable, we reward 1 to skip this example
+                    reward = 1.0
+                    print("Failed to parse gold solution: ", sol)
+                rewards.append(reward)
 
     return rewards
 
@@ -66,6 +84,27 @@ def format_reward(completions, **kwargs):
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, content, re.DOTALL | re.MULTILINE) for content in completion_contents]
     return [1.0 if match else 0.0 for match in matches]
+
+def tag_count_reward(completions, **kwargs) -> list[float]:
+    """Reward function that checks if we produce the desired number of think and answer tags associated with `format_reward()`.
+
+    Adapted from: https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb#file-grpo_demo-py-L90
+    """
+
+    def count_tags(text: str) -> float:
+        count = 0.0
+        if text.count("<think>\n") == 1:
+            count += 0.25
+        if text.count("\n</think>\n") == 1:
+            count += 0.25
+        if text.count("\n<answer>\n") == 1:
+            count += 0.25
+        if text.count("\n</answer>") == 1:
+            count += 0.25
+        return count
+
+    contents = [completion[0]["content"] for completion in completions]
+    return [count_tags(c) for c in contents]
 
 
 def reasoning_steps_reward(completions, **kwargs):
@@ -290,6 +329,30 @@ def extract_code(completion: str) -> str:
     return extracted_answer
 
 
+def evaluate_code(code, test_cases):
+    passed = 0
+    total = len(test_cases)
+    exec_timeout = 5
+
+    for case in test_cases:
+        process = subprocess.run(
+            ["python3", "-c", code],
+            input=case["input"],
+            text=True,
+            capture_output=True,
+            timeout=exec_timeout
+        )
+
+        if process.returncode != 0:  # Error in execution
+            continue
+
+        output = process.stdout.strip()
+        if output.strip() == case["output"].strip():
+            passed += 1
+
+    success_rate = (passed / total)
+    return success_rate
+
 def code_reward(completions, **kwargs) -> list[float]:
     """Reward function that evaluates code snippets using the E2B code interpreter.
 
@@ -305,55 +368,83 @@ def code_reward(completions, **kwargs) -> list[float]:
     # TODO: add support for other languages in E2B: https://e2b.dev/docs/code-interpreting/supported-languages
     try:
         """Returns a reward function that evaluates code snippets in a sandbox."""
-        evaluation_script_template = """
-        import subprocess
-        import json
+        # evaluation_script_template = """
+        # import subprocess
+        # import json
 
-        def evaluate_code(code, test_cases):
-            passed = 0
-            total = len(test_cases)
-            exec_timeout = 5
+        # def evaluate_code(code, test_cases):
+        #     passed = 0
+        #     total = len(test_cases)
+        #     exec_timeout = 5
 
-            for case in test_cases:
-                process = subprocess.run(
-                    ["python3", "-c", code],
-                    input=case["input"],
-                    text=True,
-                    capture_output=True,
-                    timeout=exec_timeout
-                )
+        #     for case in test_cases:
+        #         process = subprocess.run(
+        #             ["python3", "-c", code],
+        #             input=case["input"],
+        #             text=True,
+        #             capture_output=True,
+        #             timeout=exec_timeout
+        #         )
 
-                if process.returncode != 0:  # Error in execution
-                    continue
+        #         if process.returncode != 0:  # Error in execution
+        #             continue
 
-                output = process.stdout.strip()
-                if output.strip() == case["output"].strip():
-                    passed += 1
+        #         output = process.stdout.strip()
+        #         if output.strip() == case["output"].strip():
+        #             passed += 1
 
-            success_rate = (passed / total)
-            return success_rate
+        #     success_rate = (passed / total)
+        #     return success_rate
 
-        code_snippet = {code}
-        test_cases = json.loads({test_cases})
+        # code_snippet = {code}
+        # test_cases = json.loads({test_cases})
 
-        evaluate_code(code_snippet, test_cases)
-        """
+        # evaluate_code(code_snippet, test_cases)
+        # """
+        # evaluation_script_template = """
+        # code_snippet = {code}
+        # test_cases = json.loads({test_cases})
+
+        # evaluate_code(code_snippet, test_cases)
+        # """
+
         code_snippets = [extract_code(completion[-1]["content"]) for completion in completions]
         verification_info = kwargs["verification_info"]
-        scripts = [
-            evaluation_script_template.format(
-                code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"]))
-            )
-            for code, info in zip(code_snippets, verification_info)
-        ]
-        with Sandbox(timeout=30, request_timeout=3) as sbx:
-            for script in scripts:
-                execution = sbx.run_code(script, language=verification_info["language"])
-                try:
-                    output = float(execution.text)
-                except (TypeError, ValueError):
-                    output = 0.0
-                rewards.append(output)
+
+        # scripts = [
+        #     evaluation_script_template.format(
+        #         code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"]))
+        #     )
+        #     for code, info in zip(code_snippets, verification_info)
+        # ]
+
+        # scripts = []
+        pattern = re.compile('(?<!\\\\)\'')
+        for code, str_info in zip(code_snippets, verification_info):
+            # script = evaluation_script_template.format(
+            #     code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"]))
+            # )
+            # scripts.append(script)
+            try:
+                str_info = pattern.sub('\"', str_info)
+                info = json.loads(str_info)
+
+                success_rate = evaluate_code(code, info['test_cases'])
+                output = float(success_rate)
+            except Exception as e2:
+                print(f"Error from evaluate_code: {e2}")
+                output = 0.0
+            
+            rewards.append(output)            
+
+        # with Sandbox(timeout=30, request_timeout=3) as sbx:
+        #     for script in scripts:
+        #         execution = sbx.run_code(script, language=verification_info["language"])
+        #         try:
+        #             output = float(execution.text)
+        #         except (TypeError, ValueError):
+        #             output = 0.0
+        #         rewards.append(output)
     except Exception as e:
         print(f"Error from E2B executor: {e}")
         rewards = [0.0] * len(completions)

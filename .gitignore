@@ -178,3 +178,18 @@ eval_results/
 results/
 
 .vscode/
+
+rlpvr-v1.6-small-full/
+rlpvr-v1.7-small-full/
+rlpvr-v1.7.2-small-full/
+rlpvr-v1.7.3-small-full/
+rlpvr-v1.8-small-full/
+
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v.mj-small.yaml
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v1.2-medium.yaml
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v1.2-small.yaml
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v1.3-small.yaml
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v1.4-small.yaml
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v1.6-small.yaml
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v1.7-small.yaml
+recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/rlpvr-v1.8-small.yaml
