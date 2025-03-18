@@ -1,5 +1,6 @@
 # Model arguments
-model_name_or_path: Qwen/Qwen2.5-Math-7B
+# model_name_or_path: Qwen/Qwen2.5-Math-7B
+model_name_or_path: /workspace/rlpvr-open-r1/models/Qwen2.5-Math-7B
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
@@ -10,7 +11,7 @@ chat_template: "{% if not add_generation_prompt is defined %}{% set add_generati
 
 # v1.9 is mcqa 110k + math 200k
 # dataset_name: /mnt/nas/seongyun/tap/datasets/real_final/final_mcqa_math_210k.jsonl
-dataset_name: /dev/shm/rlpvr-open-r1/datasets/final_mcqa_math_210k.jsonl
+dataset_name: /workspace/rlpvr-open-r1/datasets/final_mcqa_math_210k.jsonl
 # dataset_configs:
 # - default
 system_prompt: "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
