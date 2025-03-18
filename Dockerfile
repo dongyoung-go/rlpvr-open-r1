@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y git
 WORKDIR /workspace
 # RUN git clone https://oss.navercorp.com/dongyoung-go/rlpvr-open-r1.git
 RUN git clone https://github.com/dongyoung-go/rlpvr-open-r1.git
+# RUN mkdir -p /workspace/rlpvr-open-r1
+# COPY * /workspace/rlpvr-open-r1/
 WORKDIR /workspace/rlpvr-open-r1
 
 # kinit
@@ -40,7 +42,7 @@ RUN uv venv openr1 --python 3.11 \
     && uv pip install vllm==0.7.2 --link-mode=copy \
     && uv pip install setuptools \
     && uv pip install flash-attn --no-build-isolation \
-    && uv pip install wandb --link-mode=copy \
+    && uv pip install wandb \
     && GIT_LFS_SKIP_SMUDGE=1 uv pip install -e ".[dev]" --link-mode=copy
 
 # Ensure that the "adllm" environment is activated by default
