@@ -12,7 +12,10 @@ RUN apt update && apt install -y openssh-server vim tmux htop libgl1-mesa-glx fp
     && service ssh restart
 
 RUN apt-get update && apt-get install -y git
-RUN git clone https://oss.navercorp.com/dongyoung-go/rlpvr-open-r1.git
+WORKDIR /workspace
+# RUN git clone https://oss.navercorp.com/dongyoung-go/rlpvr-open-r1.git
+RUN git clone https://github.com/dongyoung-go/rlpvr-open-r1.git
+WORKDIR /workspace/rlpvr-open-r1
 
 # # kinit
 # # hdfs-connector
@@ -24,21 +27,20 @@ RUN git clone https://oss.navercorp.com/dongyoung-go/rlpvr-open-r1.git
 #     && echo "alias hdfs='/root/c3s-hdfs-connector-0.7/bin/hdfs-connector'" >> /root/.bashrc
 
 # Copy the setup.py into the Docker image
-COPY setup.py /root/setup.py
+# COPY setup.py /root/setup.py
 
-
-# # Install UV package manager
-# RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-# # Ensure the UV binary is available in PATH
-# ENV PATH="/root/.local/bin:${PATH}"
-# # Create and activate a virtual environment
-# RUN uv venv openr1 --python 3.11 \
-#     && source openr1/bin/activate \
-#     && uv pip install --upgrade pip --link-mode=copy \
-#     && uv pip install vllm==0.7.2 --link-mode=copy \
-#     && uv pip install setuptools \
-#     && uv pip install flash-attn --no-build-isolation \
-#     && GIT_LFS_SKIP_SMUDGE=1 uv pip install -e ".[dev]" --link-mode=copy
+# Install UV package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# Ensure the UV binary is available in PATH
+ENV PATH="/root/.local/bin:${PATH}"
+# Create and activate a virtual environment
+RUN uv venv openr1 --python 3.11 \
+    && source openr1/bin/activate \
+    && uv pip install --upgrade pip --link-mode=copy \
+    && uv pip install vllm==0.7.2 --link-mode=copy \
+    && uv pip install setuptools \
+    && uv pip install flash-attn --no-build-isolation \
+    && GIT_LFS_SKIP_SMUDGE=1 uv pip install -e ".[dev]" --link-mode=copy
 
 # Ensure that the "adllm" environment is activated by default
 # ENV PATH="/root/miniconda3/envs/adllm/bin:$PATH"
