@@ -17,17 +17,17 @@ WORKDIR /workspace
 RUN git clone https://github.com/dongyoung-go/rlpvr-open-r1.git
 WORKDIR /workspace/rlpvr-open-r1
 
-# # kinit
-# # hdfs-connector
-# RUN apt update && apt install -y krb5-user pdsh \
-#     && wget http://dist.navercorp.com/repos/release/c3s-hdfs-connector/c3s-hdfs-connector-0.7.tar.gz -O /root/c3s-hdfs-connector-0.7.tar.gz \
-#     && tar xzvf /root/c3s-hdfs-connector-0.7.tar.gz -C /root \
-#     && rm /root/c3s-hdfs-connector-0.7.tar.gz \
-#     && echo "source /root/c3s-hdfs-connector-0.7/bin/source.me" >> /root/.bashrc \
-#     && echo "alias hdfs='/root/c3s-hdfs-connector-0.7/bin/hdfs-connector'" >> /root/.bashrc
+# kinit
+# hdfs-connector
+RUN apt update && apt install -y krb5-user pdsh \
+    && wget http://dist.navercorp.com/repos/release/c3s-hdfs-connector/c3s-hdfs-connector-0.7.tar.gz -O /root/c3s-hdfs-connector-0.7.tar.gz \
+    && tar xzvf /root/c3s-hdfs-connector-0.7.tar.gz -C /root \
+    && rm /root/c3s-hdfs-connector-0.7.tar.gz \
+    && echo "source /root/c3s-hdfs-connector-0.7/bin/source.me" >> /root/.bashrc \
+    && echo "alias hdfs='/root/c3s-hdfs-connector-0.7/bin/hdfs-connector'" >> /root/.bashrc
 
-# Copy the setup.py into the Docker image
-# COPY setup.py /root/setup.py
+# Copy the keytab into the Docker image
+COPY c3s.search-gpt.keytab /root/c3s.search-gpt.keytab
 
 # Install UV package manager
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -40,6 +40,7 @@ RUN uv venv openr1 --python 3.11 \
     && uv pip install vllm==0.7.2 --link-mode=copy \
     && uv pip install setuptools \
     && uv pip install flash-attn --no-build-isolation \
+    && uv pip install wandb --link-mode=copy \
     && GIT_LFS_SKIP_SMUDGE=1 uv pip install -e ".[dev]" --link-mode=copy
 
 # Ensure that the "adllm" environment is activated by default
