@@ -45,9 +45,9 @@ output_dir: /data/dongyounggo/rlpvr
 overwrite_output_dir: true
 per_device_eval_batch_size: 15
 per_device_train_batch_size: 21
-push_to_hub: true
+push_to_hub: false
 report_to:
-- wandb
+- none
 reward_funcs:
 - accuracy
 
