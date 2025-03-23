@@ -18,7 +18,7 @@ use_vllm: true
 vllm_device: auto
 vllm_gpu_memory_utilization: 0.7
 do_eval: false
-gradient_accumulation_steps: 3
+gradient_accumulation_steps: 8
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
@@ -34,9 +34,9 @@ lr_scheduler_type: cosine_with_min_lr
 lr_scheduler_kwargs:
   min_lr_rate: 0.1
 max_prompt_length: 512
-max_completion_length: 2048
+max_completion_length: 1024
 max_steps: -1
-num_generations: 3
+num_generations: 7
 num_train_epochs: 1
 output_dir: <output-dir>
 overwrite_output_dir: true
