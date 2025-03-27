@@ -13,10 +13,11 @@ klist -kte ${C3S_KEYTAB}
 export HDFS_CONNECTOR_PATH=/root/c3s-hdfs-connector-0.7/bin/hdfs-connector
 
 
-$HDFS_CONNECTOR_PATH -ls hdfs://jmt/user/search-gpt/models/multimodal/datasets
 # download 
 mkdir datasets
 $HDFS_CONNECTOR_PATH -get -f hdfs://jmt/user/search-gpt/models/multimodal/datasets/ ./
+mkdir evaluation
+$HDFS_CONNECTOR_PATH -get -f hdfs://jmt/user/search-gpt/models/multimodal/evaluation/ ./
 
 # Eval
 mkdir -p /workspace/rlpvr-open-r1/evaluation/outputs/math_data/aime_2024/
