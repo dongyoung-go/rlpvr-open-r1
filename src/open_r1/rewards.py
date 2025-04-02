@@ -1,4 +1,4 @@
-# coding=utf-8
+v# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,7 @@ import json
 import math
 import re
 from functools import partial, update_wrapper
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict
 
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
@@ -38,47 +38,58 @@ else:
     AsyncSandbox = None
 
 
-def accuracy_reward(completions: list[list[dict[str, str]]], solution: list[str], **kwargs) -> list[Optional[float]]:
+def accuracy_reward(completions, solution, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
+
     for content, sol in zip(contents, solution):
-        gold_parsed = parse(
-            sol,
-            extraction_mode="first_match",
-        )
-        if len(gold_parsed) != 0:
-            # We require the answer to be provided in correct latex (no malformed operators)
-            answer_parsed = parse(
-                content,
-                extraction_config=[
-                    LatexExtractionConfig(
-                        normalization_config=NormalizationConfig(
-                            nits=False,
-                            malformed_operators=False,
-                            basic_latex=True,
-                            equations=True,
-                            boxed="all",
-                            units=True,
-                        ),
-                        # Ensures that boxed is tried first
-                        boxed_match_priority=0,
-                        try_extract_without_anchor=False,
-                    )
-                ],
-                extraction_mode="first_match",
-            )
-            # Compute binary rewards if verifiable, `None` otherwise to skip this example
-            try:
+        if 'A' == sol or 'B' == sol or 'C' == sol or 'D' == sol or 'E' == sol or 'F' == sol or 'G' == sol or 'H' == sol:
+            gold_parsed = sol
+            if len(gold_parsed) != 0:
+                answer_parsed = parse(content, extraction_config=[StringExtractionConfig(strings=("A", "B", "C", "D", "E", "F", "G", "H"))], extraction_mode="first_match")
                 reward = float(verify(gold_parsed, answer_parsed))
-            except Exception as e:
-                print(f"verify failed: {e}, answer: {answer_parsed}, gold: {gold_parsed}")
-                reward = None
+            else:
+                # If the gold solution is not parseable, we reward 1 to skip this example
+                print("Failed to parse gold solution: ", sol)
+                reward = 1.0
+
+            rewards.append(reward)
+            
         else:
-            # If the gold solution is not parseable, we assign `None` to skip this example
-            reward = None
-            print("Failed to parse gold solution: ", sol)
-        rewards.append(reward)
+            gold_parsed = parse(
+                sol,
+                extraction_mode="first_match",
+                extraction_config=[LatexExtractionConfig()],
+            )
+            if len(gold_parsed) != 0:
+                # We require the answer to be provided in correct latex (no malformed operators)
+                answer_parsed = parse(
+                    content,
+                    extraction_config=[
+                        LatexExtractionConfig(
+                            normalization_config=NormalizationConfig(
+                                nits=False,
+                                malformed_operators=False,
+                                basic_latex=True,
+                                equations=True,
+                                boxed="all",
+                                units=True,
+                            ),
+                            # Ensures that boxed is tried first
+                            boxed_match_priority=0,
+                            try_extract_without_anchor=False,
+                        )
+                    ],
+                    extraction_mode="first_match",
+                )
+                # Reward 1 if the content is the same as the ground truth, 0 otherwise
+                reward = float(verify(answer_parsed, gold_parsed))
+            else:
+                # If the gold solution is not parseable, we reward 1 to skip this example
+                reward = 1.0
+                print("Failed to parse gold solution: ", sol)
+            rewards.append(reward)
 
     return rewards
 
@@ -567,3 +578,4 @@ def get_reward_funcs(script_args) -> list[Callable]:
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 
     return reward_funcs
+

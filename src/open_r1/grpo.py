@@ -73,7 +73,62 @@ def main(script_args, training_args, model_args):
         init_wandb_training(training_args)
 
     # Load the dataset
-    dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
+
+    def make_conversation(dataset):
+        prompt = []
+        new = []
+        for example in dataset:
+            if training_args.system_prompt is not None:
+                prompt.append({"role": "system", "content": training_args.system_prompt})
+
+            prompt.append({"role": "user", "content": example["problem"]})
+            example["prompt"] = prompt
+            new.append(example)
+        return new
+
+    with open(script_args.dataset_name, "r") as f:
+        dataset = []
+        for line in f:
+            dataset.append(json.loads(line))
+
+
+    random.shuffle(dataset)
+    
+    eval_dataset = [{"problem": "dummy", "solution": "dummy", "messages": [{"role": "user", "content": "dummy"}, {"role": "assistant", "content": "dummy"}]}]
+    
+    new_dataset = []
+    for d in dataset:
+        if '```python' in d['solution']:
+            continue
+            new_dataset.append({
+                "prompt": [
+                    {"role": "system", "content": training_args.system_prompt},
+                    {"role": "user", "content": d["problem"]},
+                ],
+                "solution": d["solution"],
+            })
+        else:
+            new_dataset.append({
+                "prompt": [
+                    {"role": "system", "content": training_args.system_prompt},
+                    {"role": "user", "content": d["problem"]},
+                ],
+                "solution": d["solution"]
+            })
+    
+    dataset = new_dataset
+    
+    new_dataset = []
+    for d in eval_dataset:
+        new_dataset.append({
+            "prompt": [
+                {"role": "system", "content": training_args.system_prompt},
+                {"role": "user", "content": d["problem"]},
+            ],
+            "solution": d["solution"]
+        })
+    
+    eval_dataset = new_dataset
 
     ################
     # Load tokenizer
@@ -82,21 +137,6 @@ def main(script_args, training_args, model_args):
 
     # Get reward functions from the registry
     reward_funcs = get_reward_funcs(script_args)
-
-    # Format into conversation
-    def make_conversation(example, prompt_column: str = script_args.dataset_prompt_column):
-        prompt = []
-
-        if training_args.system_prompt is not None:
-            prompt.append({"role": "system", "content": training_args.system_prompt})
-
-        if prompt_column not in example:
-            raise ValueError(f"Dataset Question Field Error: {prompt_column} is not supported.")
-
-        prompt.append({"role": "user", "content": example[prompt_column]})
-        return {"prompt": prompt}
-
-    dataset = dataset.map(make_conversation)
 
     for split in dataset:
         if "messages" in dataset[split].column_names:
@@ -122,8 +162,8 @@ def main(script_args, training_args, model_args):
         model=model_args.model_name_or_path,
         reward_funcs=reward_funcs,
         args=training_args,
-        train_dataset=dataset[script_args.dataset_train_split],
-        eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+        train_dataset=dataset,
+        eval_dataset=eval_dataset if training_args.eval_strategy != "no" else None,
         peft_config=get_peft_config(model_args),
         callbacks=get_callbacks(training_args, model_args),
         processing_class=tokenizer,
@@ -185,3 +225,4 @@ if __name__ == "__main__":
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
     main(script_args, training_args, model_args)
+
