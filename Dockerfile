@@ -16,7 +16,7 @@ WORKDIR /workspace
 # RUN git clone https://oss.navercorp.com/dongyoung-go/rlpvr-open-r1.git
 RUN git clone https://github.com/dongyoung-go/rlpvr-open-r1.git
 WORKDIR /workspace/rlpvr-open-r1
-
+RUN git checkout dy-test.0.0.1
 # kinit
 # hdfs-connector
 RUN apt update && apt install -y krb5-user pdsh \
